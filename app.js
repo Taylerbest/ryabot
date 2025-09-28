@@ -9,7 +9,6 @@ class IslandMap {
         this.canvas = document.getElementById('islandCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.currentZoom = 1;
-        this.targetZoom = 1;
         this.showGrid = true;
         this.hoverInfo = document.getElementById('hoverInfo');
         this.currentCoords = document.getElementById('currentCoords');
@@ -21,18 +20,15 @@ class IslandMap {
             custom: '#ff6b6b'
         };
 
-        // Параметры для плавного зума
-        this.zoomSpeed = 0.25;
+        // Параметры для зума
         this.minZoom = 0.3;
         this.maxZoom = 8;
-        this.isZooming = false;
-        this.zoomAnimationId = null;
+        this.baseCanvasSize = 1000; // Базовый размер для зума 1x
 
         // Touch/Pinch параметры
         this.touches = [];
         this.lastPinchDistance = 0;
         this.isPinching = false;
-        this.initialPinchZoom = 1;
         this.pinchCenter = { x: 0, y: 0 };
 
         // Параметры для перемещения карты
@@ -43,33 +39,47 @@ class IslandMap {
         this.dragStartScrollTop = 0;
         this.lastTouchTime = 0;
         this.touchStartTime = 0;
-        this.hasMoved = false; // Для определения клика vs перетаскивания
+        this.hasMoved = false;
 
         // Параметры тап-перемещения
         this.isMovingToTarget = false;
         this.moveAnimationId = null;
 
         // Контейнер для скролла
-        this.container = null;
+        this.container = this.canvas.parentElement;
 
-        this.baseSize = 2000;
-        this.cellSize = 20;
+        // Размеры участков
+        this.baseCellSize = 10; // Базовый размер клетки для зума 1x
         
         this.setupCanvas();
         this.init();
     }
 
     setupCanvas() {
-        this.canvas.width = this.baseSize;
-        this.canvas.height = this.baseSize;
-        this.canvas.style.width = (this.baseSize / 2) + 'px';
-        this.canvas.style.height = (this.baseSize / 2) + 'px';
+        // Устанавливаем начальный размер канваса
+        this.updateCanvasSize();
         this.ctx.imageSmoothingEnabled = false;
         this.ctx.webkitImageSmoothingEnabled = false;
         this.ctx.mozImageSmoothingEnabled = false;
+    }
 
-        // Находим контейнер для скролла
-        this.container = this.canvas.parentElement;
+    // НОВЫЙ метод: обновляем реальный размер канваса вместо CSS transform
+    updateCanvasSize() {
+        const newSize = Math.round(this.baseCanvasSize * this.currentZoom);
+        
+        // Устанавливаем реальный размер канваса
+        this.canvas.width = newSize;
+        this.canvas.height = newSize;
+        
+        // Устанавливаем CSS размер (всегда равен реальному размеру)
+        this.canvas.style.width = newSize + 'px';
+        this.canvas.style.height = newSize + 'px';
+        
+        // Убираем CSS transform полностью
+        this.canvas.style.transform = 'none';
+        
+        // Обновляем размер ячеек
+        this.currentCellSize = Math.max(1, this.baseCellSize * this.currentZoom);
     }
 
     async init() {
@@ -260,7 +270,7 @@ class IslandMap {
         document.getElementById('setImage').addEventListener('click', () => this.setCustomImage());
     }
 
-    // Зум колесиком мыши
+    // ИСПРАВЛЕННЫЙ зум колесиком мыши
     handleWheelZoom(e) {
         e.preventDefault();
         
@@ -271,37 +281,38 @@ class IslandMap {
         const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoom * zoomFactor));
         
-        this.setZoomInstantly(newZoom, mouseX, mouseY);
+        this.setZoomCorrectly(newZoom, mouseX, mouseY);
     }
 
-    // ИСПРАВЛЕННАЯ мгновенная установка зума с правильным центрированием
-    setZoomInstantly(newZoom, centerX, centerY) {
+    // ПОЛНОСТЬЮ НОВЫЙ метод зума с правильной математикой
+    setZoomCorrectly(newZoom, focusX, focusY) {
+        // Сохраняем текущие позиции
         const oldZoom = this.currentZoom;
-        const scrollLeft = this.container.scrollLeft;
-        const scrollTop = this.container.scrollTop;
+        const oldScrollLeft = this.container.scrollLeft;
+        const oldScrollTop = this.container.scrollTop;
         
-        // Вычисляем точку в "мировых" координатах канваса
-        const worldX = (centerX + scrollLeft) / oldZoom;
-        const worldY = (centerY + scrollTop) / oldZoom;
+        // Вычисляем позицию фокуса в координатах карты до зума
+        const mapX = (focusX + oldScrollLeft) / oldZoom;
+        const mapY = (focusY + oldScrollTop) / oldZoom;
         
         // Устанавливаем новый зум
         this.currentZoom = newZoom;
-        this.targetZoom = newZoom;
-        this.applyZoom();
+        this.updateCanvasSize();
+        this.render();
         
-        // Пересчитываем позицию скролла так, чтобы точка осталась под курсором/пальцем
-        const newScrollLeft = worldX * newZoom - centerX;
-        const newScrollTop = worldY * newZoom - centerY;
+        // Вычисляем новую позицию скролла чтобы фокус остался на месте
+        const newScrollLeft = mapX * newZoom - focusX;
+        const newScrollTop = mapY * newZoom - focusY;
         
-        // Ограничиваем скролл границами канваса
-        const maxScrollLeft = this.canvas.offsetWidth - this.container.clientWidth;
-        const maxScrollTop = this.canvas.offsetHeight - this.container.clientHeight;
+        // Применяем новый скролл
+        this.container.scrollLeft = Math.max(0, newScrollLeft);
+        this.container.scrollTop = Math.max(0, newScrollTop);
         
-        this.container.scrollLeft = Math.max(0, Math.min(maxScrollLeft, newScrollLeft));
-        this.container.scrollTop = Math.max(0, Math.min(maxScrollTop, newScrollTop));
+        // Обновляем индикатор зума
+        document.getElementById('zoomLevel').textContent = `${Math.round(this.currentZoom * 100)}%`;
     }
 
-    // Touch события - ИСПРАВЛЕНО для корректной работы pinch-to-zoom
+    // Touch события - ИСПРАВЛЕНО с новой математикой зума
     handleTouchStart(e) {
         e.preventDefault();
         this.touches = Array.from(e.touches);
@@ -309,26 +320,22 @@ class IslandMap {
         this.hasMoved = false;
         
         if (this.isMovingToTarget) {
-            // Останавливаем анимацию движения при начале нового касания
             cancelAnimationFrame(this.moveAnimationId);
             this.isMovingToTarget = false;
         }
         
         if (this.touches.length === 1) {
-            // Одиночное касание - начинаем перетаскивание
             this.isDragging = true;
             this.dragStartX = this.touches[0].clientX;
             this.dragStartY = this.touches[0].clientY;
             this.dragStartScrollLeft = this.container.scrollLeft;
             this.dragStartScrollTop = this.container.scrollTop;
         } else if (this.touches.length === 2) {
-            // Двойное касание - начинаем pinch
             this.isPinching = true;
             this.isDragging = false;
             this.lastPinchDistance = this.getPinchDistance();
-            this.initialPinchZoom = this.currentZoom;
             
-            // ИСПРАВЛЕНО: правильно вычисляем центр pinch в координатах канваса
+            // Фиксируем центр pinch в координатах канваса
             const rect = this.canvas.getBoundingClientRect();
             this.pinchCenter = {
                 x: (this.touches[0].clientX + this.touches[1].clientX) / 2 - rect.left,
@@ -343,20 +350,18 @@ class IslandMap {
         this.hasMoved = true;
         
         if (this.isPinching && this.touches.length === 2) {
-            // Обрабатываем pinch-to-zoom с ИСПРАВЛЕННЫМ центрированием
             const currentDistance = this.getPinchDistance();
             const scale = currentDistance / this.lastPinchDistance;
             
             if (Math.abs(scale - 1) > 0.01) {
                 const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoom * scale));
                 
-                // Используем зафиксированный центр pinch
-                this.setZoomInstantly(newZoom, this.pinchCenter.x, this.pinchCenter.y);
+                // Используем фиксированный центр pinch
+                this.setZoomCorrectly(newZoom, this.pinchCenter.x, this.pinchCenter.y);
                 
                 this.lastPinchDistance = currentDistance;
             }
         } else if (this.isDragging && this.touches.length === 1) {
-            // Обрабатываем перетаскивание одним пальцем
             const deltaX = this.touches[0].clientX - this.dragStartX;
             const deltaY = this.touches[0].clientY - this.dragStartY;
             
@@ -375,7 +380,6 @@ class IslandMap {
         }
         
         if (remainingTouches.length === 0) {
-            // Если касание было коротким и без перетаскивания - это тап
             if (touchDuration < 300 && !this.hasMoved) {
                 const touch = e.changedTouches[0];
                 this.handleTapNavigation(touch);
@@ -388,7 +392,6 @@ class IslandMap {
         this.touches = remainingTouches;
     }
 
-    // ТАП-ПЕРЕМЕЩЕНИЕ: двойной тап для перемещения к точке
     handleTapNavigation(touch) {
         const now = Date.now();
         const timeSinceLastTap = now - this.lastTouchTime;
@@ -407,7 +410,6 @@ class IslandMap {
             const y = touch.clientY - rect.top;
             
             setTimeout(() => {
-                // Задержка чтобы не мешать двойному тапу
                 if (Date.now() - this.lastTouchTime > 250) {
                     this.processClick(x, y);
                 }
@@ -417,7 +419,6 @@ class IslandMap {
         this.lastTouchTime = now;
     }
 
-    // Плавное перемещение к точке
     smoothMoveToPoint(targetX, targetY) {
         const containerRect = this.container.getBoundingClientRect();
         const centerX = containerRect.width / 2;
@@ -429,14 +430,12 @@ class IslandMap {
         const targetScrollLeft = currentScrollLeft + (targetX - centerX);
         const targetScrollTop = currentScrollTop + (targetY - centerY);
         
-        // Ограничиваем целевую позицию границами
         const maxScrollLeft = this.canvas.offsetWidth - this.container.clientWidth;
         const maxScrollTop = this.canvas.offsetHeight - this.container.clientHeight;
         
         const finalScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
         const finalScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
         
-        // Запускаем плавную анимацию
         this.animateMoveTo(currentScrollLeft, currentScrollTop, finalScrollLeft, finalScrollTop);
     }
 
@@ -447,13 +446,12 @@ class IslandMap {
         
         this.isMovingToTarget = true;
         const startTime = Date.now();
-        const duration = 500; // 0.5 секунды
+        const duration = 500;
         
         const animate = () => {
             const elapsed = Date.now() - startTime;
             const progress = Math.min(elapsed / duration, 1);
             
-            // Easing function для плавности
             const easeProgress = 1 - Math.pow(1 - progress, 3);
             
             const currentLeft = startLeft + (endLeft - startLeft) * easeProgress;
@@ -480,9 +478,9 @@ class IslandMap {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    // Mouse события для перетаскивания на десктопе + тап-перемещение
+    // Mouse события для десктопа
     handleMouseDown(e) {
-        if (e.button === 0) { // Левая кнопка мыши
+        if (e.button === 0) {
             this.isDragging = true;
             this.dragStartX = e.clientX;
             this.dragStartY = e.clientY;
@@ -505,25 +503,21 @@ class IslandMap {
             this.container.scrollLeft = this.dragStartScrollLeft - deltaX;
             this.container.scrollTop = this.dragStartScrollTop - deltaY;
         } else {
-            // Показываем координаты при наведении
             this.updateHoverInfo(e);
         }
     }
 
     handleMouseUp(e) {
         if (this.isDragging) {
-            // Если мышка не двигалась - это клик для навигации (как двойной тап)
             if (!this.hasMoved) {
                 const rect = this.canvas.getBoundingClientRect();
                 const clickX = e.clientX - rect.left;
                 const clickY = e.clientY - rect.top;
                 
-                // Проверяем двойной клик для навигации
                 const now = Date.now();
                 const timeSinceLastClick = now - (this.lastClickTime || 0);
                 
                 if (timeSinceLastClick < 300) {
-                    // Двойной клик - перемещение
                     this.smoothMoveToPoint(clickX, clickY);
                 }
                 
@@ -560,14 +554,7 @@ class IslandMap {
         }
     }
 
-    applyZoom() {
-        this.canvas.style.transform = `scale(${this.currentZoom})`;
-        document.getElementById('zoomLevel').textContent = `${Math.round(this.currentZoom * 100)}%`;
-        this.render();
-    }
-
     handleCanvasClick(e) {
-        // Игнорируем клики во время перетаскивания или анимации
         if (this.isDragging || this.hasMoved || this.isMovingToTarget) return;
         
         const rect = this.canvas.getBoundingClientRect();
@@ -588,22 +575,12 @@ class IslandMap {
     }
 
     getPlotCoordinates(canvasX, canvasY) {
-        const scale = this.currentZoom;
-        const detail = this.getRenderDetailLevel();
-        
-        let effectiveCellSize;
-        switch(detail) {
-            case 'ultra': effectiveCellSize = this.cellSize * 6; break;
-            case 'high': effectiveCellSize = this.cellSize * 3; break;
-            case 'medium': effectiveCellSize = this.cellSize * 1.5; break;
-            default: effectiveCellSize = this.cellSize;
-        }
-
         const scrollLeft = this.container.scrollLeft;
         const scrollTop = this.container.scrollTop;
         
-        const x = Math.floor((canvasX + scrollLeft) / (effectiveCellSize * scale));
-        const y = Math.floor((canvasY + scrollTop) / (effectiveCellSize * scale));
+        // Простая математика без CSS transform
+        const x = Math.floor((canvasX + scrollLeft) / this.currentCellSize);
+        const y = Math.floor((canvasY + scrollTop) / this.currentCellSize);
 
         return { x, y };
     }
@@ -612,110 +589,64 @@ class IslandMap {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.imageSmoothingEnabled = false;
         
-        const detail = this.getRenderDetailLevel();
-        
         this.plots.forEach(plot => {
-            this.renderPlot(plot, detail);
+            this.renderPlot(plot);
         });
         
-        if (this.showGrid && detail !== 'ultra') {
-            this.renderGrid(detail);
+        if (this.showGrid) {
+            this.renderGrid();
         }
     }
 
-    getRenderDetailLevel() {
-        if (this.currentZoom >= 2.5) return 'ultra';
-        if (this.currentZoom >= 1.2) return 'high';
-        if (this.currentZoom >= 0.7) return 'medium';
-        return 'low';
-    }
-
-    renderPlot(plot, detail) {
-        const baseX = plot.coord_x * this.cellSize;
-        const baseY = plot.coord_y * this.cellSize;
-        let renderSize, renderX, renderY;
-
-        switch(detail) {
-            case 'ultra':
-                renderSize = this.cellSize * 6;
-                renderX = baseX * 6;
-                renderY = baseY * 6;
-                break;
-            case 'high':
-                renderSize = this.cellSize * 3;
-                renderX = baseX * 3;
-                renderY = baseY * 3;
-                break;
-            case 'medium':
-                renderSize = this.cellSize * 1.5;
-                renderX = baseX * 1.5;
-                renderY = baseY * 1.5;
-                break;
-            default:
-                renderSize = this.cellSize;
-                renderX = baseX;
-                renderY = baseY;
-        }
+    renderPlot(plot) {
+        const x = plot.coord_x * this.currentCellSize;
+        const y = plot.coord_y * this.currentCellSize;
+        const size = this.currentCellSize;
 
         const hasImage = plot.image_url && plot.image_url.trim() !== '';
         const imageLoaded = hasImage && this.imageCache.has(plot.image_url);
 
-        if (imageLoaded && detail !== 'low') {
+        if (imageLoaded && size > 5) {
             const img = this.imageCache.get(plot.image_url);
-            this.ctx.drawImage(img, renderX, renderY, renderSize, renderSize);
+            this.ctx.drawImage(img, x, y, size, size);
             this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
             this.ctx.lineWidth = 1;
-            this.ctx.strokeRect(renderX, renderY, renderSize, renderSize);
+            this.ctx.strokeRect(x, y, size, size);
         } else {
             this.ctx.fillStyle = this.colors[plot.status] || this.colors.unopened;
-            this.ctx.fillRect(renderX, renderY, renderSize, renderSize);
+            this.ctx.fillRect(x, y, size, size);
             
-            if (hasImage && detail !== 'low') {
-                this.renderCameraIcon(renderX, renderY, renderSize);
+            if (hasImage && size > 10) {
+                this.renderCameraIcon(x, y, size);
             }
         }
     }
 
     renderCameraIcon(x, y, size) {
-        const iconSize = Math.max(10, size / 5);
+        const iconSize = Math.max(4, size / 5);
         this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        this.ctx.fillRect(x + size - iconSize - 3, y + 3, iconSize, iconSize - 4);
+        this.ctx.fillRect(x + size - iconSize - 2, y + 2, iconSize, iconSize - 2);
         this.ctx.fillStyle = 'rgba(255,255,255,0.9)';
         this.ctx.beginPath();
-        this.ctx.arc(x + size - iconSize/2 - 3, y + 3 + iconSize/2, iconSize/4, 0, Math.PI * 2);
+        this.ctx.arc(x + size - iconSize/2 - 2, y + 2 + iconSize/2, iconSize/4, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.fillStyle = 'gold';
-        this.ctx.fillRect(x + size - iconSize + 2, y + 2, 3, 2);
+        this.ctx.fillRect(x + size - iconSize + 1, y + 1, 2, 1);
     }
 
-    renderGrid(detail) {
+    renderGrid() {
         this.ctx.strokeStyle = 'rgba(0,0,0,0.15)';
         this.ctx.lineWidth = 0.5;
-        
-        let cellSize, totalSize;
-        switch(detail) {
-            case 'high':
-                cellSize = this.cellSize * 3;
-                totalSize = this.baseSize * 3;
-                break;
-            case 'medium':
-                cellSize = this.cellSize * 1.5;
-                totalSize = this.baseSize * 1.5;
-                break;
-            default:
-                cellSize = this.cellSize;
-                totalSize = this.baseSize;
-        }
 
         for (let i = 0; i <= 100; i++) {
             this.ctx.beginPath();
-            this.ctx.moveTo(i * cellSize, 0);
-            this.ctx.lineTo(i * cellSize, totalSize);
+            this.ctx.moveTo(i * this.currentCellSize, 0);
+            this.ctx.lineTo(i * this.currentCellSize, this.canvas.height);
             this.ctx.stroke();
 
             this.ctx.beginPath();
-            this.ctx.moveTo(0, i * cellSize);
-            this.ctx.lineTo(totalSize, i * cellSize);
+            this.ctx.moveTo(0, i * this.currentCellSize);
+            this.ctx.lineTo(this.canvas.width, i * this.currentCellSize);
             this.ctx.stroke();
         }
     }
