@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏝️ Карта игрового острова - 1,000,000 гектаров</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏝️ Карта игрового острова</h1>
+            <p>Исследуйте, стройте и развивайте свою экономическую империю!</p>
+        </header>
+
+        <!-- Статистика острова -->
+        <div class="island-stats">
+            <div class="stat-block">
+                <div class="stat-number" id="discoveredPlots">0</div>
+                <div class="stat-label">Открыто участков</div>
+                <div class="stat-percent" id="discoveredPercent">0%</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-number" id="exploredPlots">0</div>
+                <div class="stat-label">Полностью изучено</div>
+                <div class="stat-percent" id="exploredPercent">0%</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-number" id="buildingsPlots">0</div>
+                <div class="stat-label">С постройками</div>
+                <div class="stat-percent" id="buildingsPercent">0%</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-number" id="ownedPlots">0</div>
+                <div class="stat-label">Куплено игроками</div>
+                <div class="stat-percent" id="ownedPercent">0%</div>
+            </div>
+            <div class="stat-block total">
+                <div class="stat-number" id="totalPlots">1,000,000</div>
+                <div class="stat-label">Всего участков</div>
+                <div class="stat-note">100 гектаров каждый</div>
+            </div>
+        </div>
+
+        <!-- Лента событий -->
+        <div class="events-feed">
+            <div class="events-title">📡 События острова:</div>
+            <div class="events-scroll" id="eventsFeed">
+                <span class="event-item">🏝️ Добро пожаловать на остров!</span>
+            </div>
+        </div>
+
+        <!-- Управление картой -->
+        <div class="controls">
+            <div class="zoom-controls">
+                <span id="zoomLevel">100%</span>
+                <button id="showGrid">📋 Сетка</button>
+            </div>
+
+            <div class="filters">
+                <select id="filterStatus">
+                    <option value="all">Все статусы</option>
+                    <option value="unexplored">Неизученные</option>
+                    <option value="discovered">Открытые</option>
+                    <option value="fully_explored">Изученные</option>
+                    <option value="owned">Купленные</option>
+                    <option value="for_sale">В продаже</option>
+                </select>
+                <select id="filterBonus">
+                    <option value="all">Все бонусы</option>
+                    <option value="none">Без бонуса</option>
+                    <option value="wheat_yield">Пшеница</option>
+                    <option value="cow_milk">Молоко</option>
+                    <option value="iron_mining">Железо</option>
+                    <option value="wood_cutting">Дерево</option>
+                </select>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="color-box unexplored"></div>
+                    <span>Неизученные</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box discovered"></div>
+                    <span>Открытые</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box fully-explored"></div>
+                    <span>Изученные</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box owned"></div>
+                    <span>Купленные</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <canvas id="islandCanvas"></canvas>
+            <div class="hover-info" id="hoverInfo"></div>
+        </div>
+
+        <div class="info">
+            <p><strong>Координаты:</strong> <span id="currentCoords">Наведите на карту</span></p>
+            <p><strong>Управление:</strong></p>
+            <ul>
+                <li>🖱️ <strong>Зум:</strong> колесико мыши или жесты двумя пальцами</li>
+                <li>✋ <strong>Перемещение:</strong> зажатая левая кнопка мыши или один палец</li>
+                <li>👆 <strong>Навигация:</strong> двойной клик/тап для перехода к точке</li>
+                <li>📋 <strong>Информация:</strong> одиночный клик/тап для открытия карточки участка</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Модальное окно участка -->
+    <div id="plotModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>🗺️ Участок № <span id="plotId"></span></h2>
+            <div class="plot-coords" id="plotCoords"></div>
+            
+            <div class="plot-sections">
+                <div class="plot-section">
+                    <h3>📊 Статус</h3>
+                    <div class="status-badge" id="plotStatus">Неизвестен</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>🔬 История исследования</h3>
+                    <div id="discoveryInfo">Информация загружается...</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>💎 Бонусы</h3>
+                    <div id="bonusInfo">Бонус неизвестен</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>💰 Экономика</h3>
+                    <div id="economicInfo">Экономическая информация</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>🏗️ Постройки</h3>
+                    <div id="buildingsInfo">Информация о постройках</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>👑 Владение</h3>
+                    <div id="ownerInfo">Информация о владельце</div>
+                </div>
+
+                <div class="plot-section">
+                    <h3>📸 Изображение</h3>
+                    <div class="image-container" id="plotImageContainer">
+                        <p style="color: #666; font-style: italic;">Изображение недоступно</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="closeModal" class="btn-secondary">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
