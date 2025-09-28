@@ -1,0 +1,422 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    /* Отключаем выделение текста на мобильных */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Отключаем контекстное меню на мобильных */
+    -webkit-touch-callout: none;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+header h1 {
+    color: #333;
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+header p {
+    color: #666;
+    font-size: 1.1em;
+}
+
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.zoom-controls button {
+    padding: 8px 12px;
+    border: none;
+    background: #4CAF50;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    min-width: 80px;
+    transition: all 0.3s ease;
+    /* Улучшаем touch-интерфейс */
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    touch-action: manipulation;
+}
+
+.zoom-controls button:hover {
+    background: #45a049;
+    transform: translateY(-2px);
+}
+
+.zoom-controls button:active {
+    transform: translateY(0);
+}
+
+.zoom-controls button.active {
+    background: #ff6b6b;
+}
+
+#zoomLevel {
+    font-weight: bold;
+    color: #333;
+    min-width: 60px;
+    text-align: center;
+    background: rgba(255,255,255,0.8);
+    padding: 5px 10px;
+    border-radius: 15px;
+    border: 1px solid #ddd;
+}
+
+.legend {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9em;
+}
+
+.color-box {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+}
+
+.color-box.unopened { background: #CCCCCC; }
+.color-box.opened { background: #4A90E2; }
+.color-box.sold { background: #50E3C2; }
+.color-box.custom { background: #ff6b6b; }
+
+.map-container {
+    position: relative;
+    width: 100%;
+    height: 600px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    overflow: auto;
+    background: #f8f9fa;
+    /* Улучшаем скроллинг на мобильных */
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+}
+
+#islandCanvas {
+    display: block;
+    border-radius: 8px;
+    cursor: grab;
+    /* Предотвращаем drag на изображениях */
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    /* Отключаем выделение */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Улучшаем touch */
+    touch-action: none;
+}
+
+#islandCanvas:active {
+    cursor: grabbing;
+}
+
+.hover-info {
+    position: fixed;
+    background: rgba(0,0,0,0.9);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    max-width: 200px;
+}
+
+.hover-info.show {
+    opacity: 1;
+}
+
+.info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #4CAF50;
+}
+
+.info p {
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.info p:last-child {
+    margin-bottom: 0;
+}
+
+/* Модальное окно */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    /* Улучшаем touch на модальном окне */
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    cursor: pointer;
+    /* Улучшаем touch для кнопки закрытия */
+    padding: 5px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+.close:hover,
+.close:focus {
+    color: #333;
+}
+
+.modal h2 {
+    margin-bottom: 20px;
+    color: #333;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+}
+
+.plot-details {
+    margin-bottom: 20px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.status-badge[data-status="unopened"] {
+    background: #CCCCCC;
+    color: #666;
+}
+
+.status-badge[data-status="opened"] {
+    background: #4A90E2;
+    color: white;
+}
+
+.status-badge[data-status="sold"] {
+    background: #50E3C2;
+    color: #333;
+}
+
+.status-badge[data-status="custom"] {
+    background: #ff6b6b;
+    color: white;
+}
+
+.price {
+    font-weight: bold;
+    color: #4CAF50;
+    font-size: 1.1em;
+}
+
+.image-container {
+    margin: 20px 0;
+    text-align: center;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.image-container img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    border: none;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.action-buttons button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: all 0.3s ease;
+    min-width: 120px;
+    /* Улучшаем touch для кнопок */
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    touch-action: manipulation;
+}
+
+.btn-primary {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #45a049;
+    transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+}
+
+/* Мобильная адаптация */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 15px;
+    }
+    
+    header h1 {
+        font-size: 2em;
+    }
+    
+    .controls {
+        justify-content: center;
+    }
+    
+    .legend {
+        justify-content: center;
+    }
+    
+    .map-container {
+        height: 400px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 2% auto;
+        padding: 20px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons button {
+        min-width: auto;
+        width: 100%;
+    }
+}
+
+/* Дополнительные стили для touch-устройств */
+@media (hover: none) and (pointer: coarse) {
+    .hover-info {
+        display: none !important;
+    }
+    
+    #islandCanvas {
+        cursor: default;
+    }
+    
+    .zoom-controls button:hover,
+    .btn-primary:hover,
+    .btn-secondary:hover {
+        transform: none;
+    }
+}
