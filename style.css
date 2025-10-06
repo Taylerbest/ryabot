@@ -1,0 +1,554 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    min-height: 100vh;
+    padding: 20px;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+header h1 {
+    color: #2c3e50;
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+header p {
+    color: #7f8c8d;
+    font-size: 1.1em;
+}
+
+/* Статистика острова */
+.island-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 10px;
+}
+
+.stat-block {
+    text-align: center;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+}
+
+.stat-block:hover {
+    transform: translateY(-2px);
+}
+
+.stat-block.total {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.stat-number {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+.stat-block.total .stat-number {
+    color: white;
+}
+
+.stat-label {
+    font-size: 0.9em;
+    color: #7f8c8d;
+    margin-bottom: 3px;
+}
+
+.stat-block.total .stat-label {
+    color: rgba(255,255,255,0.9);
+}
+
+.stat-percent {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #27ae60;
+}
+
+.stat-block.total .stat-percent {
+    display: none;
+}
+
+.stat-note {
+    font-size: 0.8em;
+    color: rgba(255,255,255,0.7);
+    margin-top: 3px;
+}
+
+/* Лента событий */
+.events-feed {
+    background: #2c3e50;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.events-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #ecf0f1;
+}
+
+.events-scroll {
+    display: flex;
+    animation: scroll-events 30s linear infinite;
+    white-space: nowrap;
+}
+
+.event-item {
+    padding-right: 50px;
+    font-size: 0.9em;
+}
+
+@keyframes scroll-events {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+}
+
+/* Управление */
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.zoom-controls button {
+    padding: 8px 12px;
+    border: none;
+    background: #27ae60;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: all 0.3s ease;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    touch-action: manipulation;
+}
+
+.zoom-controls button:hover {
+    background: #229954;
+    transform: translateY(-2px);
+}
+
+.zoom-controls button.active {
+    background: #e74c3c;
+}
+
+#zoomLevel {
+    font-weight: bold;
+    color: #2c3e50;
+    background: rgba(255,255,255,0.9);
+    padding: 8px 12px;
+    border-radius: 15px;
+    border: 2px solid #bdc3c7;
+    min-width: 80px;
+    text-align: center;
+}
+
+/* Фильтры */
+.filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filters select {
+    padding: 8px 12px;
+    border: 2px solid #bdc3c7;
+    border-radius: 5px;
+    background: white;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.filters select:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+/* Легенда */
+.legend {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9em;
+}
+
+.color-box {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #34495e;
+}
+
+.color-box.unexplored { background: #95A5A6; }
+.color-box.discovered { background: #2ECC71; }
+.color-box.fully-explored { background: #3498DB; }
+.color-box.owned { background: #9B59B6; }
+
+/* Карта */
+.map-container {
+    position: relative;
+    width: 100%;
+    height: 600px;
+    border: 2px solid #34495e;
+    border-radius: 10px;
+    overflow: auto;
+    background: #ecf0f1;
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+}
+
+#islandCanvas {
+    display: block;
+    border-radius: 8px;
+    cursor: grab;
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+
+#islandCanvas:active {
+    cursor: grabbing;
+}
+
+/* Tooltip */
+.hover-info {
+    position: fixed;
+    background: rgba(44, 62, 80, 0.95);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    max-width: 250px;
+    line-height: 1.4;
+}
+
+.hover-info.show {
+    opacity: 1;
+}
+
+.hover-info .status-unexplored { color: #95A5A6; }
+.hover-info .status-discovered { color: #2ECC71; }
+.hover-info .status-fully_explored { color: #3498DB; }
+.hover-info .status-owned { color: #9B59B6; }
+
+/* Информационная панель */
+.info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #27ae60;
+}
+
+.info p {
+    margin-bottom: 8px;
+    color: #2c3e50;
+}
+
+.info ul {
+    list-style: none;
+    margin-left: 0;
+}
+
+.info li {
+    margin-bottom: 5px;
+    color: #34495e;
+}
+
+/* Модальное окно */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-content {
+    background-color: white;
+    margin: 2% auto;
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    cursor: pointer;
+    padding: 5px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+.close:hover,
+.close:focus {
+    color: #2c3e50;
+}
+
+.modal h2 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+}
+
+.plot-coords {
+    font-size: 1.1em;
+    color: #7f8c8d;
+    margin-bottom: 20px;
+}
+
+/* Секции модального окна */
+.plot-sections {
+    display: grid;
+    gap: 20px;
+}
+
+.plot-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+}
+
+.plot-section h3 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.plot-section div {
+    color: #34495e;
+    line-height: 1.5;
+}
+
+/* Статус badge */
+.status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 15px;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.status-badge.unexplored {
+    background: #95A5A6;
+    color: white;
+}
+
+.status-badge.discovered {
+    background: #2ECC71;
+    color: white;
+}
+
+.status-badge.fully_explored {
+    background: #3498DB;
+    color: white;
+}
+
+.status-badge.owned {
+    background: #9B59B6;
+    color: white;
+}
+
+.status-badge.for_sale {
+    background: #E67E22;
+    color: white;
+}
+
+/* Контейнер изображения */
+.image-container {
+    text-align: center;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed #bdc3c7;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.image-container img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    border: none;
+}
+
+/* Кнопки действий */
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.action-buttons button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: all 0.3s ease;
+    min-width: 120px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    touch-action: manipulation;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+}
+
+/* Мобильная адаптация */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 15px;
+    }
+    
+    header h1 {
+        font-size: 2em;
+    }
+    
+    .island-stats {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        padding: 15px;
+    }
+    
+    .controls {
+        justify-content: center;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .legend {
+        justify-content: center;
+    }
+    
+    .map-container {
+        height: 400px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+        padding: 20px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons button {
+        width: 100%;
+    }
+
+    .events-scroll {
+        animation-duration: 20s;
+    }
+}
+
+/* Дополнительные стили для touch-устройств */
+@media (hover: none) and (pointer: coarse) {
+    .hover-info {
+        display: none !important;
+    }
+    
+    #islandCanvas {
+        cursor: default;
+    }
+    
+    .stat-block:hover,
+    .zoom-controls button:hover,
+    .btn-secondary:hover {
+        transform: none;
+    }
+}
