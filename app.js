@@ -1,26 +1,59 @@
-// Конфигурация Supabase
+// Инициализация Telegram WebApp
+const tg = window.Telegram?.WebApp;
+let telegramUser = null;
+
+if (tg) {
+    console.log('🤖 Telegram WebApp инициализирован');
+    tg.ready();
+    tg.expand();
+    
+    const initData = tg.initDataUnsafe;
+    if (initData?.user) {
+        telegramUser = initData.user;
+        console.log('👤 Пользователь Telegram:', telegramUser);
+    }
+    
+    if (tg.colorScheme === 'dark') {
+        document.body.classList.add('dark-theme');
+    }
+    
+    tg.setHeaderColor('#2c3e50');
+    tg.BackButton.hide();
+} else {
+    console.log('⚠️ Telegram WebApp не обнаружен (работаем в браузере)');
+}
+
+// Конфигурация Supabase для Ryabot Island
 const SUPABASE_URL = 'https://fqgcctsvozcoezpfytck.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZ2NjdHN2b3pjb2V6cGZ5dGNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwNTY0MjQsImV4cCI6MjA3NDYzMjQyNH0.rxutBSydzYJX1fBx-PfaPwtCM_K3gdQ1X20GYNNUwPQ';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-class IslandMap {
+class RyabotIslandMap {
     constructor() {
-        this.plots = [];
+        this.landplots = [];
         this.canvas = document.getElementById('islandCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.currentZoom = 1;
         this.showGrid = true;
         this.hoverInfo = document.getElementById('hoverInfo');
         this.currentCoords = document.getElementById('currentCoords');
-        this.imageCache = new Map();
         
-        // Цвета статусов участков
+        // Цвета статусов по MVP Ryabot Island
         this.statusColors = {
-            'unexplored': '#95A5A6',     // Серый - неизученные
-            'discovered': '#2ECC71',     // Зеленый - открытые
-            'fully_explored': '#3498DB', // Голубой - полностью изученные
-            'owned': '#9B59B6',          // Фиолетовый - купленные
-            'for_sale': '#E67E22'        // Оранжевый - продается
+            'undiscovered': '#95A5A6',   // Серый - неоткрытые
+            'available': '#2ECC71',      // Зеленый - доступные для покупки
+            'owned': '#3498DB',          // Синий - в собственности
+            'forsale': '#E67E22',        // Оранжевый - продается игроками
+            'anomaly': '#9B59B6'         // Фиолетовый - аномальные зоны
+        };
+
+        // Цвета зон острова
+        this.zoneColors = {
+            'plains': '#F4D03F',     // Желтоватый - равнины
+            'forest': '#58D68D',     // Зеленый - лес
+            'mountains': '#85929E',  // Серый - горы
+            'coast': '#5DADE2',      // Голубой - побережье
+            'anomaly': '#AF7AC5'     // Фиолетовый - аномалии
         };
 
         // Параметры для зума
@@ -51,45 +84,27 @@ class IslandMap {
         // Контейнер для скролла
         this.container = this.canvas.parentElement;
 
-        // Размеры участков
+        // Размеры участков (100x100 grid)
         this.baseCellSize = 10;
 
         // События для ленты новостей
         this.events = [];
         this.eventUpdateInterval = null;
 
-        // Типы бонусов
-        this.bonusTypes = {
-            agriculture: {
-                'wheat_yield': 'Пшеница',
-                'corn_yield': 'Кукуруза', 
-                'potato_yield': 'Картофель',
-                'carrot_yield': 'Морковь'
-            },
-            livestock: {
-                'cow_milk': 'Молоко коров',
-                'pig_meat': 'Свинина',
-                'chicken_eggs': 'Куриные яйца',
-                'sheep_wool': 'Овечья шерсть'
-            },
-            mining: {
-                'iron_mining': 'Добыча железа',
-                'gold_mining': 'Добыча золота',
-                'stone_quarry': 'Добыча камня',
-                'coal_mining': 'Добыча угля'
-            },
-            production: {
-                'wood_cutting': 'Лесозаготовка',
-                'fish_catch': 'Рыбная ловля',
-                'honey_production': 'Производство меда'
-            }
-        };
-
         // Фильтры
         this.activeFilters = {
             status: 'all',
-            bonus: 'all',
-            owner: 'all'
+            zone: 'all',
+            price: 'all'
+        };
+
+        // Бонусы зон по GDD
+        this.zoneBonuses = {
+            plains: { type: 'crops', value: 15, description: '+15% к урожаю культур' },
+            forest: { type: 'wood', value: 20, description: '+20% к добыче дерева' },
+            mountains: { type: 'mining', value: 25, description: '+25% к добыче ресурсов' },
+            coast: { type: 'fishing', value: 18, description: '+18% к рыбной ловле' },
+            anomaly: { type: 'rbtc', value: 50, description: '+50% к находкам RBTC' }
         };
         
         this.setupCanvas();
@@ -118,183 +133,163 @@ class IslandMap {
     }
 
     async init() {
-        await this.loadPlots();
+        await this.loadLandPlots();
         this.setupEventListeners();
         this.startEventUpdates();
         this.render();
         this.updateIslandStats();
-        console.log('✅ Карта игрового острова готова!');
+        console.log('✅ Карта Ryabot Island готова!');
     }
 
-    async loadPlots() {
-        console.log('📡 Загрузка данных острова из Supabase...');
+    async loadLandPlots() {
+        console.log('📡 Загрузка участков из Supabase...');
         try {
+            // Пытаемся загрузить из таблицы landplots
             const { data, error } = await supabase
-                .from('plots')
+                .from('landplots')
                 .select(`
-                    id, coord_x, coord_y, status, price, 
-                    owner_telegram_id, discovery_date, discovered_by_telegram_id,
-                    exploration_progress, explored_by_telegram_id, last_explored_date,
-                    bonus_type, bonus_value, neighbor_bonus_value,
-                    accumulated_value, passive_income_rate, last_income_collected,
-                    buildings_farm_wheat, buildings_farm_corn, buildings_barn_cows,
-                    buildings_barn_pigs, buildings_coop_chickens, buildings_mine_iron,
-                    buildings_mine_gold, buildings_sawmill, buildings_quarry, 
-                    buildings_house, occupied_space, available_space, tenants,
-                    image_url
+                    plotid, ownerid, zonetype, zonebonus, 
+                    pricerbtc, priceryabaks, status, 
+                    discoveredby, discoveredat, purchasedat, coordinates
                 `)
                 .limit(10000);
 
             if (error) throw error;
-            this.plots = data || [];
+            this.landplots = data || [];
 
-            if (this.plots.length < 10000) {
+            if (this.landplots.length < 10000) {
+                console.log('🏗️ Генерируем недостающие участки...');
                 this.generateMissingPlots();
             }
 
-            console.log(`✅ Загружено ${this.plots.length} участков острова`);
-            this.calculateNeighborBonuses();
+            console.log(`✅ Загружено ${this.landplots.length} участков острова`);
 
         } catch (error) {
-            console.warn('⚠️ Создаем тестовые данные локально:', error);
+            console.warn('⚠️ Создаем MVP данные локально:', error);
             this.generateAllPlotsLocally();
         }
     }
 
     generateAllPlotsLocally() {
-        console.log('🏝️ Генерируем остров с тестовыми данными...');
-        this.plots = [];
+        console.log('🏝️ Генерируем остров Ryabot Island MVP...');
+        this.landplots = [];
         
         for (let x = 0; x < 100; x++) {
             for (let y = 0; y < 100; y++) {
-                const id = y * 100 + x + 1;
+                const plotid = y * 100 + x + 1;
                 
-                // Случайное распределение статусов для тестирования
-                let status = 'unexplored';
+                // Случайное распределение статусов по MVP логике
+                let status = 'undiscovered';
                 const rand = Math.random();
-                if (rand > 0.7) status = 'discovered';
-                if (rand > 0.85) status = 'fully_explored';
-                if (rand > 0.95) status = 'owned';
-                if (rand > 0.98) status = 'for_sale';
                 
-                // Случайный бонус если участок открыт
-                let bonusType = null;
-                let bonusValue = 0;
-                if (status !== 'unexplored') {
-                    const categories = Object.keys(this.bonusTypes);
-                    const category = categories[Math.floor(Math.random() * categories.length)];
-                    const bonuses = Object.keys(this.bonusTypes[category]);
-                    bonusType = bonuses[Math.floor(Math.random() * bonuses.length)];
-                    bonusValue = Math.floor(Math.random() * 20) + 5; // 5-25%
-                }
+                // 60% неоткрытые, 25% доступные, 10% в собственности, 5% на продаже
+                if (rand > 0.6) status = 'available';
+                if (rand > 0.85) status = 'owned';
+                if (rand > 0.95) status = 'forsale';
 
-                // Случайные постройки для изученных участков
-                const buildings = {};
-                let playersCount = 0;
-                if (status === 'fully_explored' || status === 'owned') {
-                    if (Math.random() > 0.6) {
-                        buildings.farm_wheat = Math.floor(Math.random() * 3);
-                        buildings.barn_cows = Math.floor(Math.random() * 2);
-                        buildings.house = Math.floor(Math.random() * 5);
-                        playersCount = Math.floor(Math.random() * 8) + 1; // 1-8 игроков
-                    }
-                }
+                // Определяем зону по позиции на карте
+                let zonetype = this.determineZoneByPosition(x, y);
+                
+                // Цены по MVP экономике (100-2000 RBTC)
+                const basePrice = 100;
+                const zoneMultiplier = {
+                    'plains': 1.0,
+                    'forest': 1.2,
+                    'coast': 1.5,
+                    'mountains': 1.8,
+                    'anomaly': 3.0
+                }[zonetype];
+                
+                const priceRBTC = Math.round(basePrice * zoneMultiplier * (0.5 + Math.random()));
+                const priceRyabaks = priceRBTC * 60; // Курс 1 RBTC = 60 рябаков
 
-                this.plots.push({
-                    id: id,
-                    coord_x: x,
-                    coord_y: y,
+                this.landplots.push({
+                    plotid: plotid,
+                    ownerid: status === 'owned' ? Math.floor(Math.random() * 1000000) : null,
+                    zonetype: zonetype,
+                    zonebonus: this.zoneBonuses[zonetype],
+                    pricerbtc: priceRBTC,
+                    priceryabaks: priceRyabaks,
                     status: status,
-                    price: status === 'for_sale' ? Math.round(1000 + Math.random() * 50000) : Math.round(100 + Math.random() * 400),
-                    owner_telegram_id: status === 'owned' ? Math.floor(Math.random() * 1000000) : null,
-                    discovery_date: status !== 'unexplored' ? '2025-09-' + (Math.floor(Math.random() * 28) + 1) : null,
-                    discovered_by_telegram_id: status !== 'unexplored' ? Math.floor(Math.random() * 1000000) : null,
-                    exploration_progress: status === 'discovered' ? Math.floor(Math.random() * 70) + 10 : (status !== 'unexplored' ? 100 : 0),
-                    explored_by_telegram_id: status !== 'unexplored' ? Math.floor(Math.random() * 1000000) : null,
-                    bonus_type: bonusType,
-                    bonus_value: bonusValue,
-                    neighbor_bonus_value: 0,
-                    accumulated_value: status !== 'unexplored' ? Math.round(Math.random() * 10000) : 0,
-                    passive_income_rate: status === 'owned' ? (Math.random() * 5 + 1).toFixed(1) : 0,
-                    buildings_count: Object.values(buildings).reduce((a, b) => a + b, 0),
-                    players_count: playersCount,
-                    occupied_space: playersCount * Math.floor(Math.random() * 15) + 5,
-                    available_space: 100,
-                    image_url: (status === 'owned' && Math.random() > 0.7) ? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop' : null
+                    discoveredby: status !== 'undiscovered' ? Math.floor(Math.random() * 1000000) : null,
+                    discoveredat: status !== 'undiscovered' ? this.generateRandomDate() : null,
+                    purchasedat: status === 'owned' ? this.generateRandomDate() : null,
+                    coordinates: { x: x, y: y }
                 });
             }
         }
 
-        this.calculateNeighborBonuses();
-        console.log('🎲 Тестовый остров создан!');
+        console.log('🎲 MVP остров Ryabot Island создан!');
     }
 
-    calculateNeighborBonuses() {
-        // Вычисляем бонусы от соседних участков (в 2 раза слабее)
-        this.plots.forEach(plot => {
-            if (!plot.bonus_type) return;
-            
-            let neighborBonus = 0;
-            const neighbors = this.getNeighbors(plot.coord_x, plot.coord_y);
-            
-            neighbors.forEach(neighbor => {
-                if (neighbor && neighbor.bonus_type === plot.bonus_type) {
-                    neighborBonus += Math.floor(neighbor.bonus_value / 2);
-                }
-            });
-            
-            plot.neighbor_bonus_value = neighborBonus;
-        });
-    }
-
-    getNeighbors(x, y) {
-        const neighbors = [];
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                if (dx === 0 && dy === 0) continue;
-                const nx = x + dx;
-                const ny = y + dy;
-                if (nx >= 0 && nx < 100 && ny >= 0 && ny < 100) {
-                    neighbors.push(this.findPlotByCoords(nx, ny));
-                }
-            }
+    determineZoneByPosition(x, y) {
+        // Логика определения зон по позиции (как в настоящих островах)
+        const centerX = 50, centerY = 50;
+        const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+        
+        // Побережье - края карты
+        if (x < 5 || x > 94 || y < 5 || y > 94) {
+            return 'coast';
         }
-        return neighbors;
+        
+        // Аномалии - случайные редкие зоны (2%)
+        if (Math.random() < 0.02) {
+            return 'anomaly';
+        }
+        
+        // Горы - центральная часть острова
+        if (distanceFromCenter < 15) {
+            return 'mountains';
+        }
+        
+        // Лес - кольцо вокруг гор
+        if (distanceFromCenter < 30) {
+            return 'forest';
+        }
+        
+        // Равнины - остальная территория
+        return 'plains';
+    }
+
+    generateRandomDate() {
+        const start = new Date('2025-09-01');
+        const end = new Date();
+        return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
     }
 
     startEventUpdates() {
-        // Генерируем случайные события для ленты
-        this.generateRandomEvents();
+        this.generateRyabotEvents();
         this.updateEventsFeed();
         
-        // Обновляем события каждые 10 секунд
+        // Обновляем события каждые 15 секунд
         this.eventUpdateInterval = setInterval(() => {
-            if (Math.random() > 0.7) { // 30% шанс нового события
-                this.generateRandomEvents();
+            if (Math.random() > 0.6) { // 40% шанс нового события
+                this.generateRyabotEvents();
                 this.updateEventsFeed();
             }
-        }, 10000);
+        }, 15000);
     }
 
-    generateRandomEvents() {
+    generateRyabotEvents() {
         const eventTemplates = [
-            { type: 'discovery', text: '🗺️ Игрок{id} открыл участок X:{x} Y:{y}' },
-            { type: 'exploration', text: '🔬 Участок X:{x} Y:{y} изучен на {progress}%' },
-            { type: 'purchase', text: '💰 Игрок{id} купил участок X:{x} Y:{y}' },
-            { type: 'building', text: '🏗️ На X:{x} Y:{y} построена {building}' },
-            { type: 'milestone', text: '🎉 Остров исследован на {percent}%!' }
+            { type: 'discovery', text: '🗺️ Игрок{id} открыл новый участок в зоне {zone}' },
+            { type: 'purchase', text: '💰 Участок #{plot} куплен за {price} RBTC' },
+            { type: 'sale', text: '🏪 Участок #{plot} выставлен на продажу за {price} RBTC' },
+            { type: 'anomaly', text: '⚡ Найдена аномалия! Участок #{plot} дает особые бонусы' },
+            { type: 'expedition', text: '🚀 Экспедиция обнаружила {count} новых участков' },
+            { type: 'milestone', text: '🎉 {percent}% острова уже исследовано игроками!' }
         ];
         
         const template = eventTemplates[Math.floor(Math.random() * eventTemplates.length)];
-        const randomPlot = this.plots[Math.floor(Math.random() * this.plots.length)];
+        const randomPlot = this.landplots[Math.floor(Math.random() * this.landplots.length)];
         
         let eventText = template.text
             .replace('{id}', Math.floor(Math.random() * 1000))
-            .replace('{x}', randomPlot.coord_x)
-            .replace('{y}', randomPlot.coord_y)
-            .replace('{progress}', Math.floor(Math.random() * 100))
-            .replace('{building}', 'пшеничная ферма')
-            .replace('{percent}', '23.4');
+            .replace('{plot}', randomPlot.plotid)
+            .replace('{price}', randomPlot.pricerbtc)
+            .replace('{zone}', this.getZoneDisplayName(randomPlot.zonetype))
+            .replace('{count}', Math.floor(Math.random() * 10) + 1)
+            .replace('{percent}', (25 + Math.random() * 50).toFixed(1));
             
         this.events.unshift({
             id: Date.now(),
@@ -304,6 +299,17 @@ class IslandMap {
         
         // Оставляем только последние 5 событий
         this.events = this.events.slice(0, 5);
+    }
+
+    getZoneDisplayName(zonetype) {
+        const zoneNames = {
+            'plains': 'Равнины',
+            'forest': 'Лес', 
+            'mountains': 'Горы',
+            'coast': 'Побережье',
+            'anomaly': 'Аномальная зона'
+        };
+        return zoneNames[zonetype] || zonetype;
     }
 
     updateEventsFeed() {
@@ -316,44 +322,39 @@ class IslandMap {
     }
 
     updateIslandStats() {
-        const totalPlots = this.plots.length;
-        const discoveredPlots = this.plots.filter(p => p.status !== 'unexplored').length;
-        const fullyExploredPlots = this.plots.filter(p => p.status === 'fully_explored' || p.status === 'owned').length;
-        const ownedPlots = this.plots.filter(p => p.status === 'owned').length;
-        const plotsWithBuildings = this.plots.filter(p => p.buildings_count > 0).length;
+        const totalPlots = this.landplots.length;
+        const discoveredPlots = this.landplots.filter(p => p.status !== 'undiscovered').length;
+        const ownedPlots = this.landplots.filter(p => p.status === 'owned').length;
+        const forSalePlots = this.landplots.filter(p => p.status === 'forsale').length;
+        
+        // Подсчет общей стоимости RBTC на рынке
+        const totalRBTC = this.landplots
+            .filter(p => p.status === 'available' || p.status === 'forsale')
+            .reduce((sum, p) => sum + (p.pricerbtc || 0), 0);
 
         const discoveredPercent = ((discoveredPlots / totalPlots) * 100).toFixed(1);
-        const exploredPercent = ((fullyExploredPlots / totalPlots) * 100).toFixed(1);
         const ownedPercent = ((ownedPlots / totalPlots) * 100).toFixed(1);
-        const buildingsPercent = ((plotsWithBuildings / totalPlots) * 100).toFixed(1);
+        const salePercent = ((forSalePlots / totalPlots) * 100).toFixed(1);
 
-        document.getElementById('totalPlots').textContent = totalPlots.toLocaleString();
         document.getElementById('discoveredPlots').textContent = discoveredPlots.toLocaleString();
         document.getElementById('discoveredPercent').textContent = discoveredPercent + '%';
-        document.getElementById('exploredPlots').textContent = fullyExploredPlots.toLocaleString();
-        document.getElementById('exploredPercent').textContent = exploredPercent + '%';
         document.getElementById('ownedPlots').textContent = ownedPlots.toLocaleString();
         document.getElementById('ownedPercent').textContent = ownedPercent + '%';
-        document.getElementById('buildingsPlots').textContent = plotsWithBuildings.toLocaleString();
-        document.getElementById('buildingsPercent').textContent = buildingsPercent + '%';
+        document.getElementById('forSalePlots').textContent = forSalePlots.toLocaleString();
+        document.getElementById('salePercent').textContent = salePercent + '%';
+        document.getElementById('totalValue').textContent = totalRBTC.toLocaleString();
     }
 
     setupEventListeners() {
-        // Колесико мыши для плавного зума
+        // Зум и навигация
         this.canvas.addEventListener('wheel', (e) => this.handleWheelZoom(e), { passive: false });
-        
-        // Touch события для мобильных устройств
         this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
         this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
         this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
-
-        // Mouse события для десктопа
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         this.canvas.addEventListener('mouseleave', () => this.handleMouseLeave());
-
-        // Клики по участкам
         this.canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
 
         // Фильтры
@@ -362,17 +363,27 @@ class IslandMap {
             this.render();
         });
         
-        document.getElementById('filterBonus').addEventListener('change', (e) => {
-            this.activeFilters.bonus = e.target.value;
+        document.getElementById('filterZone').addEventListener('change', (e) => {
+            this.activeFilters.zone = e.target.value;
             this.render();
         });
 
-        // Остальные события
+        document.getElementById('filterPrice').addEventListener('change', (e) => {
+            this.activeFilters.price = e.target.value;
+            this.render();
+        });
+
+        // Управление
         document.getElementById('showGrid').addEventListener('click', () => this.toggleGrid());
+        document.getElementById('resetView').addEventListener('click', () => this.resetView());
 
         // Модальное окно
         document.querySelector('.close').addEventListener('click', () => this.closeModal());
         document.getElementById('closeModal').addEventListener('click', () => this.closeModal());
+        
+        // Интеграция с игрой
+        document.getElementById('openInGame').addEventListener('click', () => this.openInGame());
+        document.getElementById('viewInBot').addEventListener('click', () => this.openInBot());
     }
 
     // Зум колесиком мыши
@@ -682,9 +693,23 @@ class IslandMap {
             return false;
         }
         
-        if (this.activeFilters.bonus !== 'all') {
-            if (this.activeFilters.bonus === 'none' && plot.bonus_type) return false;
-            if (this.activeFilters.bonus !== 'none' && plot.bonus_type !== this.activeFilters.bonus) return false;
+        if (this.activeFilters.zone !== 'all' && plot.zonetype !== this.activeFilters.zone) {
+            return false;
+        }
+
+        if (this.activeFilters.price !== 'all') {
+            const price = plot.pricerbtc || 0;
+            switch (this.activeFilters.price) {
+                case 'cheap':
+                    if (price >= 50) return false;
+                    break;
+                case 'medium':
+                    if (price < 50 || price >= 200) return false;
+                    break;
+                case 'expensive':
+                    if (price < 200) return false;
+                    break;
+            }
         }
         
         return true;
@@ -694,7 +719,7 @@ class IslandMap {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.imageSmoothingEnabled = false;
         
-        this.plots.forEach(plot => {
+        this.landplots.forEach(plot => {
             if (this.shouldRenderPlot(plot)) {
                 this.renderPlot(plot);
             }
@@ -706,19 +731,16 @@ class IslandMap {
     }
 
     renderPlot(plot) {
-        const x = plot.coord_x * this.currentCellSize;
-        const y = plot.coord_y * this.currentCellSize;
+        const x = plot.coordinates.x * this.currentCellSize;
+        const y = plot.coordinates.y * this.currentCellSize;
         const size = this.currentCellSize;
 
-        // Основной цвет по статусу
-        let color = this.statusColors[plot.status] || this.statusColors.unexplored;
-        
-        // Если есть картинка и участок достаточно большой, показываем её
-        const hasImage = plot.image_url && plot.image_url.trim() !== '';
-        if (hasImage && size > 8 && plot.status !== 'unexplored') {
-            // Здесь можно добавить загрузку и отображение картинок
-            // Пока просто меняем цвет на золотистый для участков с картинками
-            color = '#F1C40F';
+        // Определяем цвет по статусу или зоне
+        let color;
+        if (plot.status === 'anomaly' || plot.zonetype === 'anomaly') {
+            color = this.zoneColors.anomaly;
+        } else {
+            color = this.statusColors[plot.status] || this.statusColors.undiscovered;
         }
 
         this.ctx.fillStyle = color;
@@ -726,26 +748,27 @@ class IslandMap {
 
         // Добавляем индикаторы для больших участков
         if (size > 15) {
-            // Показываем прогресс исследования для открытых участков
-            if (plot.status === 'discovered' && plot.exploration_progress > 0) {
-                const progressHeight = (size * plot.exploration_progress / 100);
-                this.ctx.fillStyle = 'rgba(52, 152, 219, 0.7)';
-                this.ctx.fillRect(x, y + size - progressHeight, size, progressHeight);
-            }
-
-            // Показываем количество игроков для участков с постройками
-            if (plot.players_count > 0) {
+            // Показываем цену для доступных участков
+            if (plot.status === 'available' || plot.status === 'forsale') {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                this.ctx.font = `${Math.min(size / 3, 12)}px Arial`;
+                this.ctx.font = `${Math.min(size / 4, 10)}px Arial`;
                 this.ctx.textAlign = 'center';
-                this.ctx.fillText(plot.players_count.toString(), x + size/2, y + size/2 + 4);
+                this.ctx.fillText(plot.pricerbtc + 'R', x + size/2, y + size/2 + 3);
             }
 
-            // Рамка для владельцев
+            // Рамка для участков в собственности
             if (plot.status === 'owned') {
                 this.ctx.strokeStyle = '#2C3E50';
                 this.ctx.lineWidth = 2;
                 this.ctx.strokeRect(x, y, size, size);
+            }
+
+            // Специальная отметка для аномалий
+            if (plot.zonetype === 'anomaly') {
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                this.ctx.font = `${Math.min(size / 3, 12)}px Arial`;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('⚡', x + size/2, y + size/2 + 4);
             }
         }
     }
@@ -773,27 +796,15 @@ class IslandMap {
         this.hoverInfo.classList.add('show');
         
         const statusText = this.getStatusText(plot.status);
-        let bonusText = 'Нет бонуса';
-        
-        if (plot.bonus_type) {
-            const category = Object.keys(this.bonusTypes).find(cat => 
-                this.bonusTypes[cat][plot.bonus_type]
-            );
-            if (category) {
-                const bonusName = this.bonusTypes[category][plot.bonus_type];
-                bonusText = `${bonusName} +${plot.bonus_value}%`;
-                if (plot.neighbor_bonus_value > 0) {
-                    bonusText += ` (соседи: +${plot.neighbor_bonus_value}%)`;
-                }
-            }
-        }
+        const zoneText = this.getZoneDisplayName(plot.zonetype);
+        const bonusText = plot.zonebonus ? plot.zonebonus.description : 'Нет бонуса';
         
         this.hoverInfo.innerHTML = `
-            <strong>Участок ${plot.id}</strong><br>
+            <strong>Участок ${plot.plotid}</strong><br>
             <span class="status-${plot.status}">● ${statusText}</span><br>
+            🌍 ${zoneText}<br>
             💎 ${bonusText}<br>
-            ${plot.players_count > 0 ? `👥 ${plot.players_count} игроков<br>` : ''}
-            💰 ${plot.accumulated_value ? Math.round(plot.accumulated_value).toLocaleString() + ' монет' : '0 монет'}
+            💰 ${plot.pricerbtc} RBTC (${plot.priceryabaks.toLocaleString()} рябаков)
         `;
     }
 
@@ -802,7 +813,7 @@ class IslandMap {
     }
 
     findPlotByCoords(x, y) {
-        return this.plots.find(plot => plot.coord_x === x && plot.coord_y === y);
+        return this.landplots.find(plot => plot.coordinates.x === x && plot.coordinates.y === y);
     }
 
     toggleGrid() {
@@ -813,109 +824,96 @@ class IslandMap {
         this.render();
     }
 
+    resetView() {
+        // Возврат к центру острова
+        this.currentZoom = 1;
+        this.updateCanvasSize();
+        
+        const centerX = (this.canvas.offsetWidth - this.container.clientWidth) / 2;
+        const centerY = (this.canvas.offsetHeight - this.container.clientHeight) / 2;
+        
+        this.animateMoveTo(
+            this.container.scrollLeft,
+            this.container.scrollTop,
+            centerX,
+            centerY
+        );
+        
+        this.render();
+        document.getElementById('zoomLevel').textContent = '100%';
+    }
+
     showPlotDetails(plot) {
         // Заполняем базовую информацию
-        document.getElementById('plotId').textContent = plot.id;
-        document.getElementById('plotCoords').textContent = `X:${plot.coord_x}, Y:${plot.coord_y}`;
+        document.getElementById('plotId').textContent = plot.plotid;
+        document.getElementById('plotCoords').textContent = `Координаты: X:${plot.coordinates.x}, Y:${plot.coordinates.y}`;
+        
+        // Статус и цены
         document.getElementById('plotStatus').textContent = this.getStatusText(plot.status);
         document.getElementById('plotStatus').className = `status-badge ${plot.status}`;
+        document.getElementById('rbtcPrice').textContent = `${plot.pricerbtc} RBTC`;
+        document.getElementById('ryabaksPrice').textContent = `${plot.priceryabaks.toLocaleString()} рябаков`;
+
+        // Информация о зоне
+        document.getElementById('zoneType').textContent = this.getZoneDisplayName(plot.zonetype);
+        document.getElementById('zoneType').className = `zone-type ${plot.zonetype}`;
         
-        // Информация об исследовании
-        const discoveryInfo = document.getElementById('discoveryInfo');
-        if (plot.status === 'unexplored') {
-            discoveryInfo.innerHTML = '<em>Участок еще не исследован</em>';
-        } else {
-            let info = '';
-            if (plot.discovery_date) {
-                info += `🗺️ Открыт: ${new Date(plot.discovery_date).toLocaleDateString()}<br>`;
-            }
-            if (plot.exploration_progress > 0 && plot.exploration_progress < 100) {
-                info += `🔬 Изучен на: ${plot.exploration_progress}%<br>`;
-            }
-            if (plot.exploration_progress === 100) {
-                info += `✅ Полностью изучен<br>`;
-            }
-            discoveryInfo.innerHTML = info || 'Информация недоступна';
-        }
-
-        // Бонус участка
-        const bonusInfo = document.getElementById('bonusInfo');
-        if (plot.bonus_type) {
-            const category = Object.keys(this.bonusTypes).find(cat => 
-                this.bonusTypes[cat][plot.bonus_type]
-            );
-            if (category) {
-                const bonusName = this.bonusTypes[category][plot.bonus_type];
-                let bonusText = `💎 ${bonusName}: +${plot.bonus_value}%`;
-                if (plot.neighbor_bonus_value > 0) {
-                    bonusText += `<br>🔗 Бонус от соседей: +${plot.neighbor_bonus_value}%`;
-                    bonusText += `<br><strong>Итого: +${plot.bonus_value + plot.neighbor_bonus_value}%</strong>`;
-                }
-                bonusInfo.innerHTML = bonusText;
-            }
-        } else {
-            bonusInfo.innerHTML = '<em>Бонус неизвестен</em>';
-        }
-
-        // Экономическая информация
-        const economicInfo = document.getElementById('economicInfo');
-        let econText = `💰 Накопленная ценность: ${Math.round(plot.accumulated_value || 0).toLocaleString()} монет<br>`;
-        if (plot.passive_income_rate > 0) {
-            econText += `📈 Пассивный доход: ${plot.passive_income_rate}% в месяц<br>`;
-        }
-        if (plot.status === 'for_sale') {
-            econText += `🏷️ Цена продажи: ${Math.round(plot.price).toLocaleString()} монет`;
-        }
-        economicInfo.innerHTML = econText;
-
-        // Информация о постройках
-        const buildingsInfo = document.getElementById('buildingsInfo');
-        if (plot.players_count > 0) {
-            let buildingText = `👥 Игроков на участке: <strong>${plot.players_count}</strong><br>`;
-            buildingText += `📏 Занято места: ${plot.occupied_space || 0}/100 гектаров<br>`;
-            
-            if (plot.buildings_count > 0) {
-                buildingText += `🏗️ Всего построек: ${plot.buildings_count}<br>`;
-                // Здесь можно добавить детализацию по типам построек
-            }
-            
-            buildingsInfo.innerHTML = buildingText;
-        } else {
-            buildingsInfo.innerHTML = '<em>На участке нет построек</em>';
-        }
-
-        // Картинка участка
-        const imageContainer = document.getElementById('plotImageContainer');
-        if (plot.image_url && plot.status !== 'unexplored') {
-            imageContainer.innerHTML = `
-                <img src="${plot.image_url}" 
-                     alt="Участок ${plot.id}" 
-                     style="max-width: 100%; border-radius: 8px;"
-                     onerror="this.style.display='none'">
+        if (plot.zonebonus) {
+            document.getElementById('zoneBonuses').innerHTML = `
+                <div class="bonus-item">
+                    <span class="bonus-icon">${this.getBonusIcon(plot.zonebonus.type)}</span>
+                    <span class="bonus-text">${plot.zonebonus.description}</span>
+                </div>
             `;
         } else {
-            imageContainer.innerHTML = '<p style="color: #666; font-style: italic;">Изображение недоступно</p>';
+            document.getElementById('zoneBonuses').innerHTML = '<em>Бонусы неизвестны</em>';
         }
 
         // Информация о владельце
-        const ownerInfo = document.getElementById('ownerInfo');
-        if (plot.owner_telegram_id) {
-            ownerInfo.innerHTML = `👑 Владелец: Игрок #${plot.owner_telegram_id}`;
+        const ownerInfo = document.getElementById('ownerData');
+        if (plot.ownerid) {
+            ownerInfo.innerHTML = `👑 Владелец: Игрок #${plot.ownerid}`;
+            if (plot.purchasedat) {
+                ownerInfo.innerHTML += `<br>📅 Куплен: ${new Date(plot.purchasedat).toLocaleDateString()}`;
+            }
         } else {
             ownerInfo.innerHTML = '<em>Участок не куплен</em>';
         }
+
+        const discovererInfo = document.getElementById('discovererData');
+        if (plot.discoveredby) {
+            discovererInfo.innerHTML = `🗺️ Исследователь: Игрок #${plot.discoveredby}`;
+            if (plot.discoveredat) {
+                discovererInfo.innerHTML += `<br>📅 Открыт: ${new Date(plot.discoveredat).toLocaleDateString()}`;
+            }
+        } else {
+            discovererInfo.innerHTML = '<em>Участок еще не исследован</em>';
+        }
+
+        // Информация о постройках (заглушка для MVP)
+        document.getElementById('buildingsInfo').innerHTML = '<em>В MVP версии постройки пока недоступны</em>';
 
         this.currentPlot = plot;
         document.getElementById('plotModal').style.display = 'block';
     }
 
+    getBonusIcon(bonusType) {
+        const icons = {
+            'crops': '🌾',
+            'wood': '🪵', 
+            'mining': '⛏️',
+            'fishing': '🎣',
+            'rbtc': '💎'
+        };
+        return icons[bonusType] || '💫';
+    }
+
     getStatusText(status) {
         const statusMap = {
-            'unexplored': 'Неизученный',
-            'discovered': 'Открытый', 
-            'fully_explored': 'Полностью изученный',
-            'owned': 'Куплен игроком',
-            'for_sale': 'Продается'
+            'undiscovered': 'Неоткрытый',
+            'available': 'Доступен для покупки',
+            'owned': 'В собственности',
+            'forsale': 'Продается игроком'
         };
         return statusMap[status] || status;
     }
@@ -924,10 +922,34 @@ class IslandMap {
         document.getElementById('plotModal').style.display = 'none';
         this.currentPlot = null;
     }
+
+    // Интеграция с Telegram ботом
+    openInGame() {
+        if (tg && this.currentPlot) {
+            // Отправляем данные обратно в бот
+            tg.sendData(JSON.stringify({
+                action: 'open_plot',
+                plotid: this.currentPlot.plotid,
+                coordinates: this.currentPlot.coordinates
+            }));
+            tg.close();
+        } else {
+            alert('Функция доступна только в Telegram боте');
+        }
+    }
+
+    openInBot() {
+        if (tg) {
+            // Переход в бот
+            tg.openTelegramLink('https://t.me/ryabotislandbot');
+        } else {
+            window.open('https://t.me/ryabotislandbot', '_blank');
+        }
+    }
 }
 
 // Запуск приложения
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('🏝️ Загружаем карту игрового острова...');
-    window.islandMap = new IslandMap();
+    console.log('🏝️ Загружаем карту Ryabot Island MVP...');
+    window.ryabotIslandMap = new RyabotIslandMap();
 });
